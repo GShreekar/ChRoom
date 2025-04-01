@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './App.css';
 import { AuthProvider } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
+import HomePage from './pages/HomePage';
 import ProtectedPage from './components/ProtectedPage';
 
 function App() {
@@ -12,7 +13,7 @@ function App() {
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/" element={
             <ProtectedPage>
-              <h1>Welcome to the protected page!</h1>
+              <HomePage />
             </ProtectedPage>
           } />
         </Routes>
