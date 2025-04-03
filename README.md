@@ -1,4 +1,4 @@
-# Chroom - Real-time Chat Application
+# ChRoom - Real-time Chat Application
 
 A lightweight real-time chat application built with React, TypeScript, and Firebase.
 
@@ -18,7 +18,7 @@ A lightweight real-time chat application built with React, TypeScript, and Fireb
 ## Setup
 
 1. Clone the repository
-2. Navigate to the frontend directory: `cd chroom/frontend`
+2. Navigate to the frontend directory: `cd ChRoom/frontend`
 3. Install dependencies: `npm install`
 4. Create a `.env` file with your Firebase configuration:
    ```
