@@ -51,7 +51,8 @@ const HomePage = () => {
             await setDoc(doc(db, 'rooms', roomCode), {
                 createdBy: currentUser?.uid,
                 createdAt: serverTimestamp(),
-                name: `Room ${roomCode}`
+                name: `Room ${roomCode}`,
+                members: [{ uid: currentUser?.uid, username }]
             });
             setSuccess(`Room created successfully! Room code: ${roomCode}`);
             setRoomCode(roomCode);
