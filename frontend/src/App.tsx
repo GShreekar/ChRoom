@@ -3,6 +3,7 @@ import './App.css';
 import { AuthProvider } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
 import HomePage from './pages/HomePage';
+import ChatRoom from './pages/ChatRoom';
 import ProtectedPage from './components/ProtectedPage';
 
 function App() {
@@ -14,6 +15,11 @@ function App() {
           <Route path="/" element={
             <ProtectedPage>
               <HomePage />
+            </ProtectedPage>
+          } />
+          <Route path="/room/:roomId" element={
+            <ProtectedPage>
+              <ChatRoom />
             </ProtectedPage>
           } />
         </Routes>

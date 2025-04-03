@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
+import { useNavigate } from 'react-router-dom';
 
 const HomePage = () => {
     const { currentUser, logout } = useAuth();
@@ -10,6 +11,7 @@ const HomePage = () => {
     const [roomCode, setRoomCode] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetchUserData = async () => {
@@ -45,14 +47,18 @@ const HomePage = () => {
         setSuccess('');
 
         try {
-            const roomCode = Math.floor(Math.random() * 1000000).toString();
+            const roomCode = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
             await setDoc(doc(db, 'rooms', roomCode), {
                 createdBy: currentUser?.uid,
                 createdAt: serverTimestamp(),
-                messages: []
+                name: `Room ${roomCode}`
             });
             setSuccess(`Room created successfully! Room code: ${roomCode}`);
             setRoomCode(roomCode);
+            
+            setTimeout(() => {
+                navigate(`/room/${roomCode}`);
+            }, 1000);
         } catch (err) {
             console.error('Error creating room: ', err);
             setError('Failed to create room. Please try again.');
@@ -75,7 +81,10 @@ const HomePage = () => {
                 return;
             }
             setSuccess(`Successfully joined room: ${roomCode}`);
-            setRoomCode(roomCode);
+            
+            setTimeout(() => {
+                navigate(`/room/${roomCode}`);
+            }, 1000);
         } catch (err) {
             console.log('Error joining room: ', err);
             setError('Failed to join room. Please try again.');
@@ -89,7 +98,7 @@ const HomePage = () => {
     return (
         <div className="flex flex-col min-h-screen">
             {/* Header with username */}
-            <header className="bg-white shadow-sm dark:bg-gray-800 rounded-xl">
+            <header className="bg-white shadow-sm dark:bg-gray-800 rounded-xl mt-8">
                 <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
                     <div className="flex items-center">
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chroom</h1>
