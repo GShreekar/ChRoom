@@ -1,48 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { 
-  doc, 
-  getDoc, 
-  updateDoc,
-  collection, 
-  addDoc, 
-  query, 
-  orderBy, 
-  onSnapshot, 
-  serverTimestamp,
-  DocumentData,
-  arrayUnion,
-  arrayRemove
-} from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-
-interface Message {
-  id: string;
-  text: string;
-  senderId: string;
-  senderName: string;
-  timestamp: Date;
-}
-
-interface RoomMember {
-  uid: string;
-  username: string;
-}
+import { useRoom } from '../hooks/useRoom';
+import { useMessages } from '../hooks/useMessages';
 
 const ChatRoom = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState<string>('');
-  const [room, setRoom] = useState<DocumentData | null>(null);
-  const [members, setMembers] = useState<RoomMember[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showMembersMobile, setShowMembersMobile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const { room, members, error: roomError, joinRoom, leaveRoom } = 
+    useRoom(roomId, currentUser?.uid, username);
+    
+  const { messages, error: messagesError, sendMessage } = 
+    useMessages(roomId);
   
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,36 +31,14 @@ const ChatRoom = () => {
     scrollToBottom();
   }, [messages]);
 
-  const joinRoom = async (userId: string, username: string) => {
-    if (!roomId) return;
-    
-    try {
-      const roomRef = doc(db, 'rooms', roomId);
-      await updateDoc(roomRef, {
-        members: arrayUnion({ uid: userId, username })
-      });
-    } catch (err) {
-      console.error('Error joining room:', err);
-      setError('Failed to join room');
-    }
-  };
-
-  const leaveRoom = async (userId: string) => {
-    if (!roomId || !username) return;
-    
-    try {
-      const roomRef = doc(db, 'rooms', roomId);
-      await updateDoc(roomRef, {
-        members: arrayRemove({ uid: userId, username })
-      });
-    } catch (err) {
-      console.error('Error leaving room:', err);
-    }
-  };
+  useEffect(() => {
+    if (roomError) setError(roomError);
+    if (messagesError) setError(messagesError);
+  }, [roomError, messagesError]);
 
   useEffect(() => {
-    const fetchRoomAndUser = async () => {
-      if (!roomId || !currentUser) return;
+    const fetchUserData = async () => {
+      if (!currentUser) return;
       
       try {
         const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
@@ -89,104 +46,48 @@ const ChatRoom = () => {
           const userUsername = userDoc.data().username;
           setUsername(userUsername);
           
-          const roomDoc = await getDoc(doc(db, 'rooms', roomId));
-          if (!roomDoc.exists()) {
-            setError('Room not found');
-            return;
-          }
-          
-          setRoom(roomDoc.data());
-          
-          await joinRoom(currentUser.uid, userUsername);
-          
+          await joinRoom();
           setLoading(false);
-          
-          const messagesRef = collection(db, 'rooms', roomId, 'messages');
-          const messagesQuery = query(messagesRef, orderBy('timestamp', 'asc'));
-          
-          const unsubscribeMessages = onSnapshot(messagesQuery, (snapshot) => {
-            const messageDocs: Message[] = [];
-            snapshot.forEach((doc) => {
-              const data = doc.data();
-              messageDocs.push({
-                id: doc.id,
-                text: data.text,
-                senderId: data.senderId,
-                senderName: data.senderName,
-                timestamp: data.timestamp?.toDate() || new Date()
-              });
-            });
-            setMessages(messageDocs);
-          }, (err) => {
-            console.error("Error getting messages: ", err);
-            setError('Failed to load messages');
-          });
-          
-          const roomRef = doc(db, 'rooms', roomId);
-          const unsubscribeRoom = onSnapshot(roomRef, (doc) => {
-            if (doc.exists()) {
-              const roomData = doc.data();
-              setRoom(roomData);
-              setMembers(roomData.members || []);
-            }
-          }, (err) => {
-            console.error("Error getting room: ", err);
-            setError('Failed to load room data');
-          });
-
-          const handleBeforeUnload = () => {
-            leaveRoom(currentUser.uid);
-          };
-          
-          window.addEventListener('beforeunload', handleBeforeUnload);
-          
-          return () => {
-            unsubscribeMessages();
-            unsubscribeRoom();
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-            leaveRoom(currentUser.uid);
-          };
         }
       } catch (err) {
-        console.error('Error fetching data: ', err);
-        setError('Error loading chat room');
+        console.error('Error fetching user data:', err);
+        setError('Error loading user data');
         setLoading(false);
       }
     };
     
-    fetchRoomAndUser();
-  }, [roomId, currentUser]);
+    fetchUserData();
+    
+    const handleBeforeUnload = () => {
+      if (currentUser?.uid) leaveRoom();
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (currentUser?.uid) leaveRoom();
+    };
+  }, [currentUser, joinRoom, leaveRoom]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!newMessage.trim() || !roomId || !currentUser) return;
-    
-    try {
-      await addDoc(collection(db, 'rooms', roomId, 'messages'), {
-        text: newMessage,
-        senderId: currentUser.uid,
-        senderName: username,
-        timestamp: serverTimestamp()
-      });
-      
+    if (await sendMessage(newMessage, currentUser?.uid || '', username)) {
       setNewMessage('');
-    } catch (err) {
-      console.error('Error sending message: ', err);
-      setError('Failed to send message');
     }
   };
 
   const handleBack = () => {
     if (currentUser) {
-      leaveRoom(currentUser.uid);
+      leaveRoom();
     }
     navigate('/');
   };
 
-  const toggleMembersMobile = () => {
-    setShowMembersMobile(!showMembersMobile);
-  };
+  const toggleMembersMobile = useCallback(() => {
+    setShowMembersMobile(prev => !prev);
+  }, []);
 
   if (loading) {
     return (
@@ -244,8 +145,8 @@ const ChatRoom = () => {
 
       {/* Mobile Members Panel - Only visible when toggled */}
       {showMembersMobile && (
-        <div className="fixed inset-0 z-50 md:hidden bg-black bg-opacity-50">
-          <div className="absolute right-0 top-0 h-full w-3/4 max-w-xs bg-white dark:bg-gray-800 shadow-lg p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 md:hidden bg-black bg-opacity-50 animate-fade-in">
+          <div className="absolute right-0 top-0 h-full w-3/4 max-w-xs bg-white dark:bg-gray-800 shadow-lg p-4 overflow-y-auto animate-slide-in-right">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                 Members ({members.length})
